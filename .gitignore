@@ -7,7 +7,8 @@
 # Docker volumes and data
 docker/*/wg-easy/
 docker/*/adguard/
-docker/*/unbound/
+docker/*/unbound/*
+!docker/*/unbound/unbound.conf
 
 # Peer configurations (keep template, ignore actual configs)
 peers/*.conf
