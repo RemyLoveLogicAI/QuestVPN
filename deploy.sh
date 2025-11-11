@@ -29,6 +29,20 @@ echo "Region: $REGION"
 echo "Inventory: $INVENTORY"
 echo ""
 
+# Check Docker installation
+if ! command -v docker &> /dev/null; then
+    echo "Error: Docker not found. Please install Docker first:"
+    echo "  https://docs.docker.com/get-docker/"
+    exit 1
+fi
+
+# Check Docker Compose
+if ! docker compose version &> /dev/null; then
+    echo "Error: Docker Compose not found. Please install Docker Compose:"
+    echo "  https://docs.docker.com/compose/install/"
+    exit 1
+fi
+
 # Check Ansible installation
 if ! command -v ansible-playbook &> /dev/null; then
     echo "Error: Ansible not found. Please install Ansible first:"

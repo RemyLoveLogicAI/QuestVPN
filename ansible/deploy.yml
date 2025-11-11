@@ -132,14 +132,21 @@
         dest: /opt/questvpn/scripts/
         mode: '0755'
 
+    - name: Copy .env file
+      copy:
+        content: |
+          WG_HOST_WEST={{ wg_host_west | default('vpn-west.example.com') }}
+          WG_HOST_EAST={{ wg_host_east | default('vpn-east.example.com') }}
+          WG_PASSWORD={{ wg_password }}
+        dest: /opt/questvpn/docker/.env
+        mode: '0600'
+
     - name: Start Docker Compose services
-      community.docker.docker_compose:
-        project_src: /opt/questvpn/docker
-        state: present
-      environment:
-        WG_HOST_WEST: "{{ wg_host_west | default('vpn-west.example.com') }}"
-        WG_HOST_EAST: "{{ wg_host_east | default('vpn-east.example.com') }}"
-        WG_PASSWORD: "{{ wg_password }}"
+      shell: |
+        cd /opt/questvpn/docker
+        docker compose up -d
+      args:
+        executable: /bin/bash
 
   handlers:
     - name: restart sshd
