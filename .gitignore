@@ -10,10 +10,32 @@ docker/*/adguard/
 docker/*/unbound/*
 !docker/*/unbound/unbound.conf
 
+# Monitoring data
+monitoring/prometheus_data/
+monitoring/grafana_data/
+monitoring/alertmanager_data/
+monitoring/loki_data/
+*.rrd
+
+# Backup files
+backup-restore/backups/
+*.tar.gz
+*.tar.gz.gpg
+*.tar.gz.sha256
+
 # Peer configurations (keep template, ignore actual configs)
 peers/*.conf
 peers/*.png
 peers/revoked/
+
+# Test artifacts
+.pytest_cache/
+*.pyc
+__pycache__/
+htmlcov/
+.coverage
+coverage.xml
+.tox/
 
 # Temporary and cache files
 *.tmp
@@ -28,7 +50,6 @@ peers/revoked/
 *.sublime-*
 
 # Python
-__pycache__/
 *.py[cod]
 *$py.class
 .venv/
@@ -39,6 +60,7 @@ venv/
 *.retry
 .ansible/
 
-# Backup files
-*.backup
-*.bak
+# CI/CD artifacts
+*.sarif
+trivy-results.*
+checkov-results.*
