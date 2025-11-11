@@ -1,0 +1,131 @@
+---
+# Common system configuration tasks
+
+- name: Set timezone
+  timezone:
+    name: "{{ timezone }}"
+
+- name: Set locale
+  locale_gen:
+    name: "{{ locale }}"
+    state: present
+
+- name: Update all packages
+  apt:
+    upgrade: dist
+    update_cache: yes
+    cache_valid_time: 3600
+
+- name: Install essential packages
+  apt:
+    name:
+      - apt-transport-https
+      - ca-certificates
+      - curl
+      - gnupg
+      - lsb-release
+      - software-properties-common
+      - ufw
+      - fail2ban
+      - unattended-upgrades
+      - python3-pip
+      - git
+      - vim
+      - htop
+      - net-tools
+      - dnsutils
+      - jq
+    state: present
+    update_cache: yes
+
+- name: Configure SSH hardening
+  lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: "{{ item.regexp }}"
+    line: "{{ item.line }}"
+    state: present
+  with_items:
+    - { regexp: "^PermitRootLogin", line: "PermitRootLogin {{ ssh_permit_root_login }}" }
+    - { regexp: "^PasswordAuthentication", line: "PasswordAuthentication {{ ssh_password_authentication }}" }
+    - { regexp: "^PubkeyAuthentication", line: "PubkeyAuthentication {{ ssh_pubkey_authentication }}" }
+    - { regexp: "^ChallengeResponseAuthentication", line: "ChallengeResponseAuthentication no" }
+    - { regexp: "^X11Forwarding", line: "X11Forwarding no" }
+    - { regexp: "^UsePAM", line: "UsePAM yes" }
+  notify: Restart SSH
+
+- name: Configure UFW defaults
+  ufw:
+    direction: "{{ item.direction }}"
+    policy: "{{ item.policy }}"
+  with_items:
+    - { direction: "incoming", policy: "{{ ufw_default_incoming }}" }
+    - { direction: "outgoing", policy: "{{ ufw_default_outgoing }}" }
+    - { direction: "routed", policy: "{{ ufw_default_routed }}" }
+
+- name: Allow SSH through UFW
+  ufw:
+    rule: limit
+    port: "{{ ssh_port }}"
+    proto: tcp
+    comment: "SSH"
+
+- name: Allow WireGuard ports through UFW
+  ufw:
+    rule: allow
+    port: "{{ item.port }}"
+    proto: "{{ item.proto }}"
+    comment: "{{ item.comment }}"
+  with_items:
+    - { port: "{{ wg_port_primary }}", proto: "udp", comment: "WireGuard primary" }
+    - { port: "{{ wg_port_alternate }}", proto: "udp", comment: "WireGuard alternate" }
+    - { port: "{{ wg_dashboard_port }}", proto: "tcp", comment: "WireGuard dashboard" }
+    - { port: "{{ adguard_setup_port }}", proto: "tcp", comment: "AdGuard setup" }
+
+- name: Enable UFW
+  ufw:
+    state: enabled
+
+- name: Configure fail2ban for SSH
+  template:
+    src: jail.local.j2
+    dest: /etc/fail2ban/jail.local
+    mode: '0644'
+  notify: Restart fail2ban
+
+- name: Start and enable fail2ban
+  systemd:
+    name: fail2ban
+    state: started
+    enabled: yes
+
+- name: Configure unattended upgrades
+  template:
+    src: 50unattended-upgrades.j2
+    dest: /etc/apt/apt.conf.d/50unattended-upgrades
+    mode: '0644'
+
+- name: Enable unattended upgrades
+  template:
+    src: 20auto-upgrades.j2
+    dest: /etc/apt/apt.conf.d/20auto-upgrades
+    mode: '0644'
+
+- name: Configure sysctl for IP forwarding
+  sysctl:
+    name: "{{ item.name }}"
+    value: "{{ item.value }}"
+    state: present
+    reload: yes
+  with_items:
+    - { name: "net.ipv4.ip_forward", value: "1" }
+    - { name: "net.ipv6.conf.all.forwarding", value: "1" }
+
+- name: Create project directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    mode: '0755'
+  with_items:
+    - "{{ project_root }}"
+    - "{{ data_dir }}"
+    - "{{ scripts_dir }}"

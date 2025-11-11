@@ -1,0 +1,11 @@
+---
+# Handlers for wg_stack role
+
+- name: Reload systemd
+  systemd:
+    daemon_reload: yes
+
+- name: Restart WireGuard stack
+  command: docker compose restart
+  args:
+    chdir: "{{ docker_compose_dir }}"
