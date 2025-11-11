@@ -1,0 +1,160 @@
+---
+- name: Deploy Quest VPN Infrastructure
+  hosts: vpn_servers
+  become: yes
+  vars:
+    ssh_port: 22
+    allowed_ssh_users: "{{ ansible_user }}"
+    
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Install required packages
+      apt:
+        name:
+          - docker.io
+          - docker-compose
+          - ufw
+          - fail2ban
+          - python3-pip
+          - qrencode
+          - wireguard-tools
+        state: present
+
+    - name: Start and enable Docker
+      systemd:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: SSH Hardening - Disable password authentication
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^#?PasswordAuthentication'
+        line: 'PasswordAuthentication no'
+        state: present
+      notify: restart sshd
+
+    - name: SSH Hardening - Disable root login
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^#?PermitRootLogin'
+        line: 'PermitRootLogin no'
+        state: present
+      notify: restart sshd
+
+    - name: SSH Hardening - Enable public key authentication
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^#?PubkeyAuthentication'
+        line: 'PubkeyAuthentication yes'
+        state: present
+      notify: restart sshd
+
+    - name: Configure UFW - Allow SSH
+      ufw:
+        rule: allow
+        port: '{{ ssh_port }}'
+        proto: tcp
+
+    - name: Configure UFW - Allow WireGuard
+      ufw:
+        rule: allow
+        port: '51820'
+        proto: udp
+
+    - name: Configure UFW - Allow wg-easy web interface
+      ufw:
+        rule: allow
+        port: '443'
+        proto: tcp
+
+    - name: Configure UFW - Allow DNS
+      ufw:
+        rule: allow
+        port: '53'
+
+    - name: Configure UFW - Allow AdGuard admin
+      ufw:
+        rule: allow
+        port: '3000'
+        proto: tcp
+        from_ip: any
+
+    - name: Enable UFW
+      ufw:
+        state: enabled
+        policy: deny
+
+    - name: Configure fail2ban for SSH
+      copy:
+        content: |
+          [sshd]
+          enabled = true
+          port = {{ ssh_port }}
+          filter = sshd
+          logpath = /var/log/auth.log
+          maxretry = 3
+          bantime = 3600
+          findtime = 600
+        dest: /etc/fail2ban/jail.d/sshd.local
+      notify: restart fail2ban
+
+    - name: Start and enable fail2ban
+      systemd:
+        name: fail2ban
+        state: started
+        enabled: yes
+
+    - name: Create VPN directory structure
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0755'
+      loop:
+        - /opt/questvpn
+        - /opt/questvpn/docker
+        - /opt/questvpn/peers
+        - /opt/questvpn/scripts
+
+    - name: Copy docker-compose files
+      copy:
+        src: "{{ playbook_dir }}/../docker/{{ region }}/"
+        dest: /opt/questvpn/docker/
+        mode: '0644'
+
+    - name: Copy utility scripts
+      copy:
+        src: "{{ playbook_dir }}/../scripts/"
+        dest: /opt/questvpn/scripts/
+        mode: '0755'
+
+    - name: Copy .env file
+      copy:
+        content: |
+          WG_HOST_WEST={{ wg_host_west | default('vpn-west.example.com') }}
+          WG_HOST_EAST={{ wg_host_east | default('vpn-east.example.com') }}
+          WG_PASSWORD={{ wg_password }}
+        dest: /opt/questvpn/docker/.env
+        mode: '0600'
+
+    - name: Start Docker Compose services
+      shell: |
+        cd /opt/questvpn/docker
+        docker compose up -d
+      args:
+        executable: /bin/bash
+
+  handlers:
+    - name: restart sshd
+      systemd:
+        name: sshd
+        state: restarted
+
+    - name: restart fail2ban
+      systemd:
+        name: fail2ban
+        state: restarted
