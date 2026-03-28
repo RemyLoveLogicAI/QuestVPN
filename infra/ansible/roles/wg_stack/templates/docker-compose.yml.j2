@@ -1,0 +1,85 @@
+version: '3.8'
+
+services:
+  unbound:
+    image: {{ unbound_image }}
+    container_name: unbound-{{ region }}
+    restart: unless-stopped
+    networks:
+      wg_net:
+        ipv4_address: {{ wg_unbound_ip }}
+    volumes:
+      - {{ data_dir }}/{{ region }}/unbound/unbound.conf:/opt/unbound/etc/unbound/unbound.conf:ro
+      - {{ data_dir }}/{{ region }}/unbound/root.hints:/opt/unbound/etc/unbound/root.hints:ro
+    healthcheck:
+      test: ["CMD", "drill", "@127.0.0.1", "cloudflare.com"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+
+  adguard:
+    image: {{ adguard_image }}
+    container_name: adguard-{{ region }}
+    restart: unless-stopped
+    depends_on:
+      - unbound
+    networks:
+      wg_net:
+        ipv4_address: {{ wg_adguard_ip }}
+    ports:
+      - "{{ adguard_setup_port }}:3000/tcp"
+    volumes:
+      - {{ data_dir }}/{{ region }}/adguard/work:/opt/adguardhome/work
+      - {{ data_dir }}/{{ region }}/adguard/conf:/opt/adguardhome/conf
+    environment:
+      - TZ=${TZ:-UTC}
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  wg-easy:
+    image: {{ wg_easy_image }}
+    container_name: wg-easy-{{ region }}
+    restart: unless-stopped
+    depends_on:
+      - adguard
+    networks:
+      wg_net:
+        ipv4_address: {{ wg_gateway }}
+    ports:
+      - "{{ wg_port_primary }}:51820/udp"
+      - "{{ wg_port_alternate }}:51821/udp"
+      - "{{ wg_dashboard_port }}:51821/tcp"
+    volumes:
+      - {{ data_dir }}/{{ region }}/wg-easy:/etc/wireguard
+    environment:
+      - WG_HOST=${WG_HOST}
+      - PASSWORD=${WG_DASHBOARD_PASS}
+      - WG_PORT={{ wg_port_primary }}
+      - WG_DEFAULT_DNS={{ wg_adguard_ip }}
+      - WG_DEFAULT_ADDRESS={{ wg_network }}
+      - WG_ALLOWED_IPS=${WG_ALLOWED_IPS:-0.0.0.0/0,::/0}
+      - WG_PERSISTENT_KEEPALIVE=${WG_PERSISTENT_KEEPALIVE:-25}
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    sysctls:
+      - net.ipv4.ip_forward=1
+      - net.ipv4.conf.all.src_valid_mark=1
+      - net.ipv6.conf.all.forwarding=1
+
+networks:
+  wg_net:
+    name: wg_net_{{ region }}
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: {{ wg_network }}
+          gateway: {{ wg_gateway }}

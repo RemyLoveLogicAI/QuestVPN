@@ -1,0 +1,86 @@
+---
+- name: Deploy QuestVPN Infrastructure
+  hosts: vpn_servers
+  become: yes
+  gather_facts: yes
+
+  pre_tasks:
+    - name: Display deployment information
+      debug:
+        msg:
+          - "Deploying to: {{ inventory_hostname }}"
+          - "Region: {{ region }}"
+          - "IP: {{ ansible_host }}"
+
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+  roles:
+    - role: common
+      tags: ['common', 'security']
+
+    - role: docker
+      tags: ['docker']
+
+    - role: wg_stack
+      tags: ['wg', 'wireguard', 'stack']
+
+  post_tasks:
+    - name: Display deployment summary
+      debug:
+        msg:
+          - "=========================================="
+          - "  Deployment Complete: {{ inventory_hostname }}"
+          - "=========================================="
+          - ""
+          - "Services:"
+          - "  - WireGuard UI: http://{{ ansible_host }}:{{ wg_dashboard_port }}"
+          - "  - AdGuard Home: http://{{ ansible_host }}:{{ adguard_setup_port }}"
+          - ""
+          - "Next steps:"
+          - "  1. Complete AdGuard Home setup"
+          - "  2. Set upstream DNS to {{ wg_unbound_ip }}:53"
+          - "  3. Generate peer configs: ./scripts/gen-peer.sh <name> {{ region }} full"
+          - "  4. Run health check: ./scripts/healthcheck.sh {{ region }}"
+          - ""
+          - "Security reminder:"
+          - "  - After AdGuard setup, restrict port {{ adguard_setup_port }} to VPN network"
+          - "  - Review firewall rules: ufw status verbose"
+          - ""
+
+- name: Post-deployment validation
+  hosts: vpn_servers
+  become: yes
+  gather_facts: no
+  tags: ['validate']
+
+  tasks:
+    - name: Check Docker service
+      systemd:
+        name: docker
+        state: started
+        enabled: yes
+      check_mode: yes
+      register: docker_status
+
+    - name: Check UFW status
+      command: ufw status
+      register: ufw_status
+      changed_when: false
+
+    - name: Check fail2ban status
+      systemd:
+        name: fail2ban
+        state: started
+      check_mode: yes
+      register: fail2ban_status
+
+    - name: Display validation results
+      debug:
+        msg:
+          - "Validation results for {{ inventory_hostname }}:"
+          - "  - Docker: {{ 'OK' if docker_status is success else 'FAILED' }}"
+          - "  - UFW: {{ 'Active' if 'Status: active' in ufw_status.stdout else 'INACTIVE' }}"
+          - "  - fail2ban: {{ 'OK' if fail2ban_status is success else 'FAILED' }}"

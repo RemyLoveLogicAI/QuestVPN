@@ -1,0 +1,108 @@
+version: '3.8'
+
+services:
+  unbound:
+    image: mvance/unbound:latest
+    container_name: unbound-west
+    restart: unless-stopped
+    networks:
+      wg_net:
+        ipv4_address: 10.2.0.3
+    volumes:
+      - ./data/unbound/unbound.conf:/opt/unbound/etc/unbound/unbound.conf:ro
+      - ./data/unbound/root.hints:/opt/unbound/etc/unbound/root.hints:ro
+    healthcheck:
+      test: ["CMD", "drill", "@127.0.0.1", "cloudflare.com"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  adguard:
+    image: adguard/adguardhome:latest
+    container_name: adguard-west
+    restart: unless-stopped
+    depends_on:
+      unbound:
+        condition: service_healthy
+    networks:
+      wg_net:
+        ipv4_address: 10.2.0.2
+    ports:
+      - "3000:3000/tcp"
+    volumes:
+      - ./data/adguard/work:/opt/adguardhome/work
+      - ./data/adguard/conf:/opt/adguardhome/conf
+    environment:
+      - TZ=${TZ:-UTC}
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  wg-easy:
+    image: ghcr.io/wg-easy/wg-easy:latest
+    container_name: wg-easy-west
+    restart: unless-stopped
+    depends_on:
+      adguard:
+        condition: service_healthy
+    networks:
+      wg_net:
+        ipv4_address: 10.2.0.1
+    ports:
+      - "51820:51820/udp"
+      - "443:51821/udp"
+      - "51821:51821/tcp"
+    volumes:
+      - ./data/wg-easy:/etc/wireguard
+    environment:
+      - WG_HOST=${WG_HOST}
+      - PASSWORD=${WG_DASHBOARD_PASS}
+      - WG_PORT=${WG_PORT:-51820}
+      - WG_DEFAULT_DNS=${WG_DEFAULT_DNS:-10.2.0.2}
+      - WG_DEFAULT_ADDRESS=10.2.0.0/24
+      - WG_ALLOWED_IPS=${WG_ALLOWED_IPS:-0.0.0.0/0,::/0}
+      - WG_PERSISTENT_KEEPALIVE=${WG_PERSISTENT_KEEPALIVE:-25}
+      - UI_TRAFFIC_STATS=true
+      - UI_CHART_TYPE=1
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    sysctls:
+      - net.ipv4.ip_forward=1
+      - net.ipv4.conf.all.src_valid_mark=1
+      - net.ipv6.conf.all.forwarding=1
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  wg_net:
+    name: wg_net_west
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 10.2.0.0/24
+          gateway: 10.2.0.1
+    driver_opts:
+      com.docker.network.bridge.name: br-wg-west
