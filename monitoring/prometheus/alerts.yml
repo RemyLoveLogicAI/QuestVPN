@@ -1,0 +1,66 @@
+groups:
+  - name: quest_vpn_alerts
+    interval: 30s
+    rules:
+      - alert: VPNServerDown
+        expr: up{job="wireguard"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "VPN server {{ $labels.instance }} is down"
+          description: "WireGuard server {{ $labels.instance }} has been down for more than 2 minutes"
+
+      - alert: HighCPUUsage
+        expr: 100 - (avg by(instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU usage on {{ $labels.instance }}"
+          description: "CPU usage is above 80% for more than 5 minutes"
+
+      - alert: HighMemoryUsage
+        expr: (node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes * 100 > 85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage on {{ $labels.instance }}"
+          description: "Memory usage is above 85% for more than 5 minutes"
+
+      - alert: DiskSpaceLow
+        expr: (node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"}) * 100 < 15
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Low disk space on {{ $labels.instance }}"
+          description: "Disk space is below 15% on {{ $labels.instance }}"
+
+      - alert: ContainerDown
+        expr: up{job=~"wireguard|adguard"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Container {{ $labels.job }} is down"
+          description: "Container {{ $labels.job }} on {{ $labels.instance }} has been down for 2 minutes"
+
+      - alert: TooManyPeers
+        expr: wireguard_latest_handshake_seconds > 180
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "WireGuard peer not responding"
+          description: "Peer {{ $labels.public_key }} hasn't had a handshake in {{ $value }} seconds"
+
+      - alert: DNSQueryFailureRate
+        expr: rate(adguard_dns_query_total{status="failed"}[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High DNS query failure rate"
+          description: "DNS query failure rate is {{ $value }} on {{ $labels.instance }}"
