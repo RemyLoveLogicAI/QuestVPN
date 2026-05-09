@@ -1,0 +1,118 @@
+---
+# WireGuard stack deployment tasks
+
+- name: Create region directory
+  file:
+    path: "{{ docker_compose_dir }}"
+    state: directory
+    mode: '0755'
+
+- name: Create data directories for services
+  file:
+    path: "{{ data_dir }}/{{ region }}/{{ item }}"
+    state: directory
+    mode: '0755'
+  with_items:
+    - wg-easy
+    - adguard/work
+    - adguard/conf
+    - unbound
+
+- name: Check if .env file exists locally
+  local_action:
+    module: stat
+    path: "{{ playbook_dir }}/../../.env.{{ region }}"
+  register: env_file_local
+  become: no
+
+- name: Copy .env file to server
+  copy:
+    src: "{{ playbook_dir }}/../../.env.{{ region }}"
+    dest: "{{ docker_compose_dir }}/.env"
+    mode: '0600'
+  when: env_file_local.stat.exists
+
+- name: Fail if .env file not found
+  fail:
+    msg: "ERROR: .env.{{ region }} not found! Please create it from .env.example"
+  when: not env_file_local.stat.exists
+
+- name: Copy docker-compose.yml
+  template:
+    src: docker-compose.yml.j2
+    dest: "{{ docker_compose_dir }}/docker-compose.yml"
+    mode: '0644'
+
+- name: Copy AdGuard bootstrap configuration
+  copy:
+    src: "{{ playbook_dir }}/../../regions/shared/adguard/bootstrap.yaml"
+    dest: "{{ data_dir }}/{{ region }}/adguard/conf/AdGuardHome.yaml"
+    mode: '0644'
+    force: no
+
+- name: Copy Unbound configuration
+  copy:
+    src: "{{ playbook_dir }}/../../regions/shared/unbound/{{ item }}"
+    dest: "{{ data_dir }}/{{ region }}/unbound/{{ item }}"
+    mode: '0644'
+  with_items:
+    - unbound.conf
+    - root.hints
+
+- name: Create Docker network
+  docker_network:
+    name: wg_net_{{ region }}
+    driver: bridge
+    ipam_config:
+      - subnet: "{{ wg_network }}"
+        gateway: "{{ wg_gateway }}"
+
+- name: Pull Docker images
+  docker_image:
+    name: "{{ item }}"
+    source: pull
+  with_items:
+    - "{{ wg_easy_image }}"
+    - "{{ adguard_image }}"
+    - "{{ unbound_image }}"
+
+- name: Start WireGuard stack
+  command: docker compose up -d
+  args:
+    chdir: "{{ docker_compose_dir }}"
+  register: compose_up
+  changed_when: "'Started' in compose_up.stdout or 'Created' in compose_up.stdout"
+
+- name: Wait for services to be healthy
+  wait_for:
+    host: "{{ ansible_host }}"
+    port: "{{ item }}"
+    delay: 5
+    timeout: 60
+  with_items:
+    - "{{ wg_dashboard_port }}"
+    - "{{ adguard_setup_port }}"
+
+- name: Create systemd service for Docker Compose
+  template:
+    src: docker-compose.service.j2
+    dest: "/etc/systemd/system/docker-compose-wg-{{ region }}.service"
+    mode: '0644'
+  notify: Reload systemd
+
+- name: Enable Docker Compose service
+  systemd:
+    name: "docker-compose-wg-{{ region }}"
+    enabled: yes
+    daemon_reload: yes
+
+- name: Display stack status
+  command: docker compose ps
+  args:
+    chdir: "{{ docker_compose_dir }}"
+  register: compose_ps
+  changed_when: false
+
+- name: Show running containers
+  debug:
+    msg: "{{ compose_ps.stdout_lines }}"

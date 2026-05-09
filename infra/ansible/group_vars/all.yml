@@ -1,0 +1,74 @@
+---
+# Global variables for all hosts
+
+# System configuration
+timezone: "UTC"
+locale: "en_US.UTF-8"
+
+# Security settings
+ssh_port: 22
+ssh_permit_root_login: "no"
+ssh_password_authentication: "no"
+ssh_pubkey_authentication: "yes"
+
+# Firewall rules
+ufw_default_incoming: "deny"
+ufw_default_outgoing: "allow"
+ufw_default_routed: "deny"
+
+# fail2ban configuration
+fail2ban_enabled: true
+fail2ban_maxretry: 5
+fail2ban_bantime: 600
+fail2ban_findtime: 600
+
+# Docker configuration
+docker_version: "latest"
+docker_compose_version: "v2.24.0"
+docker_users:
+  - "{{ ansible_user }}"
+
+# Docker daemon settings
+docker_daemon_config:
+  log-driver: "json-file"
+  log-opts:
+    max-size: "10m"
+    max-file: "3"
+  live-restore: true
+  userland-proxy: false
+  no-new-privileges: true
+
+# WireGuard network configuration
+wg_network: "10.2.0.0/24"
+wg_gateway: "10.2.0.1"
+wg_adguard_ip: "10.2.0.2"
+wg_unbound_ip: "10.2.0.3"
+wg_peer_start_ip: "10.2.0.10"
+
+# Service ports
+wg_port_primary: 51820
+wg_port_alternate: 443
+wg_dashboard_port: 51821
+adguard_setup_port: 3000
+adguard_dns_port: 53
+unbound_dns_port: 53
+
+# Service versions
+wg_easy_image: "ghcr.io/wg-easy/wg-easy:latest"
+adguard_image: "adguard/adguardhome:latest"
+unbound_image: "mvance/unbound:latest"
+
+# Paths
+project_root: "/opt/questvpn"
+docker_compose_dir: "{{ project_root }}/{{ region }}"
+data_dir: "{{ project_root }}/data"
+scripts_dir: "{{ project_root }}/scripts"
+
+# Unattended upgrades
+unattended_upgrades_enabled: true
+unattended_upgrades_autoreboot: true
+unattended_upgrades_autoreboot_time: "03:00"
+
+# Health check
+healthcheck_enabled: true
+healthcheck_interval: "*/6 * * * *"  # Every 6 hours

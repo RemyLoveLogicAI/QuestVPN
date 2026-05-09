@@ -1,0 +1,104 @@
+# AdGuard Home Bootstrap Configuration
+# This file provides initial settings. Complete setup via web UI.
+
+bind_host: 0.0.0.0
+bind_port: 3000
+
+users:
+  - name: admin
+    password: $2a$10$changeme  # Change via web UI on first login
+
+dns:
+  bind_hosts:
+    - 0.0.0.0
+  port: 53
+  
+  # Use Unbound as upstream (CRITICAL FOR PRIVACY)
+  upstream_dns:
+    - 10.2.0.3:53
+  
+  # Disable other upstreams
+  bootstrap_dns:
+    - 10.2.0.3:53
+  
+  # Enable DNSSEC validation
+  enable_dnssec: true
+  
+  # Disable public resolvers
+  fallback_dns: []
+  
+  # Cache settings
+  cache_size: 4194304
+  cache_ttl_min: 600
+  cache_ttl_max: 86400
+  cache_optimistic: true
+  
+  # Performance
+  edns_client_subnet: false
+  ratelimit: 20
+  refuse_any: true
+  
+  # Privacy
+  anonymize_client_ip: true
+  
+  # Block settings
+  blocked_response_ttl: 10
+  
+  # Query log (disable after setup for privacy)
+  querylog_enabled: true
+  querylog_interval: 24h
+  querylog_size_memory: 1000
+
+filtering:
+  protection_enabled: true
+  filtering_enabled: true
+  
+  # Block ads, trackers, malware
+  filters:
+    - enabled: true
+      url: https://adguardteam.github.io/AdGuardSDNSFilter/Filters/filter.txt
+      name: AdGuard DNS filter
+      id: 1
+    
+    - enabled: true
+      url: https://big.oisd.nl/
+      name: OISD Big List
+      id: 2
+    
+    - enabled: true
+      url: https://raw.githubusercontent.com/hagezi/dns-blocklists/main/wildcard/pro-onlydomains.txt
+      name: HaGeZi Pro
+      id: 3
+
+  # Enable safe browsing
+  safe_browsing_enabled: true
+  parental_enabled: false
+  safe_search_enabled: false
+
+# Statistics (consider disabling for privacy)
+statistics:
+  enabled: true
+  interval: 24h
+  ignored: []
+
+# Disable logging after setup
+log_file: ""
+log_max_backups: 0
+log_max_size: 100
+log_max_age: 3
+log_compress: false
+log_localtime: false
+verbose: false
+
+# TLS (configure if needed)
+tls:
+  enabled: false
+  server_name: ""
+  force_https: false
+  port_https: 443
+  port_dns_over_tls: 853
+  port_dns_over_quic: 853
+  allow_unencrypted_doh: false
+
+# Schema version
+schema_version: 20
